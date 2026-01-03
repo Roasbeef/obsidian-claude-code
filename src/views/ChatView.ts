@@ -410,8 +410,10 @@ export class ChatView extends ItemView {
       this.messageList.render(this.messages);
       this.scrollToBottom();
     } catch (error) {
-      logger.error("ChatView", "Error sending message", { error: String(error), name: (error as Error).name });
-      if ((error as Error).name !== "AbortError") {
+      const errorMessage = String(error);
+      const isAbort = (error as Error).name === "AbortError" || errorMessage.includes("aborted");
+      logger.error("ChatView", "Error sending message", { error: errorMessage, name: (error as Error).name, isAbort });
+      if (!isAbort) {
         console.error("Error sending message:", error);
         this.showError(error instanceof Error ? error.message : "Unknown error");
       }

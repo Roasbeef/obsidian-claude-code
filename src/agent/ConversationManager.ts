@@ -89,19 +89,11 @@ export class ConversationManager {
 
     const content = JSON.stringify(this.index, null, 2);
 
-    // Use adapter.exists() for more reliable file existence check.
-    const adapter = vault.adapter;
-    const exists = await adapter.exists(indexPath);
-
-    if (exists) {
-      await adapter.write(indexPath, content);
-    } else {
-      try {
-        await vault.create(indexPath, content);
-      } catch (e) {
-        // If create fails due to race condition, write directly.
-        await adapter.write(indexPath, content);
-      }
+    // Always use adapter.write() to avoid race conditions with vault.create().
+    try {
+      await vault.adapter.write(indexPath, content);
+    } catch (e) {
+      logger.error("ConversationManager", "Failed to save index", { error: String(e) });
     }
   }
 
@@ -177,19 +169,11 @@ export class ConversationManager {
 
     const content = JSON.stringify(conversation, null, 2);
 
-    // Use adapter.exists() for more reliable file existence check.
-    const adapter = vault.adapter;
-    const exists = await adapter.exists(path);
-
-    if (exists) {
-      await adapter.write(path, content);
-    } else {
-      try {
-        await vault.create(path, content);
-      } catch (e) {
-        // If create fails due to race condition, write directly.
-        await adapter.write(path, content);
-      }
+    // Always use adapter.write() to avoid race conditions with vault.create().
+    try {
+      await vault.adapter.write(path, content);
+    } catch (e) {
+      logger.error("ConversationManager", "Failed to save conversation", { error: String(e) });
     }
   }
 
