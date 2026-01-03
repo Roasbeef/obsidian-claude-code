@@ -1,0 +1,32 @@
+{
+  "name": "obsidian-claude-code",
+  "version": "0.1.0",
+  "description": "Claude Code AI assistant for Obsidian with Agent SDK and skills support",
+  "main": "main.js",
+  "scripts": {
+    "dev": "bun run esbuild.config.mjs",
+    "build": "bun run tsc -noEmit -skipLibCheck && bun run esbuild.config.mjs production",
+    "version": "bun run version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "claude",
+    "ai",
+    "mcp",
+    "agent"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "latest",
+    "tslib": "^2.6.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "zod": "^3.23.0"
+  }
+}

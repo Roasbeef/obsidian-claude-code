@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+*.js.map
+
+# Bun
+bun.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Claude Code local files
+CLAUDE.md
+
+# Debug logs
+debug.log
+*.log
+
+# Obsidian
+data.json
+
+# Sessions
+.sessions/
+.claude/
