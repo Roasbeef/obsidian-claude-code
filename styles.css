@@ -798,3 +798,68 @@
 .claude-code-message-content code.claude-code-vault-link:hover {
   text-decoration-style: solid;
 }
+
+/* Subagent-specific styling */
+.claude-code-tool-call.subagent-task {
+  border-left: 3px solid var(--interactive-accent);
+}
+
+.claude-code-tool-call.subagent-task .claude-code-tool-call-name {
+  color: var(--interactive-accent);
+}
+
+/* Subagent progress indicator */
+.claude-code-subagent-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--background-secondary-alt);
+  border-radius: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* Animated spinner for running subagents */
+.subagent-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: subagent-spin 1s linear infinite;
+}
+
+@keyframes subagent-spin {
+  to { transform: rotate(360deg); }
+}
+
+.subagent-message {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.subagent-duration {
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+  font-size: 11px;
+}
+
+/* Subagent status-specific colors */
+.claude-code-tool-call-status.starting,
+.claude-code-tool-call-status.running,
+.claude-code-tool-call-status.thinking {
+  color: var(--text-accent);
+}
+
+.claude-code-tool-call-status.completed {
+  color: var(--text-success);
+}
+
+.claude-code-tool-call-status.interrupted {
+  color: var(--text-warning);
+}
+
+.claude-code-tool-call-status.error {
+  color: var(--text-error);
+}

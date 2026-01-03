@@ -53,6 +53,16 @@ export interface ChatMessage {
   isStreaming?: boolean;
 }
 
+// Subagent status for lifecycle tracking.
+export type SubagentStatus = "starting" | "running" | "thinking" | "completed" | "interrupted" | "error";
+
+// Subagent progress information.
+export interface SubagentProgress {
+  message?: string;
+  startTime: number;
+  lastUpdate: number;
+}
+
 // Tool call information for display.
 export interface ToolCall {
   id: string;
@@ -63,6 +73,13 @@ export interface ToolCall {
   error?: string;
   startTime: number;
   endTime?: number;
+
+  // Subagent-specific fields for Task tool calls.
+  isSubagent?: boolean;
+  subagentId?: string;
+  subagentType?: string;
+  subagentStatus?: SubagentStatus;
+  subagentProgress?: SubagentProgress;
 }
 
 // Conversation metadata (SDK handles actual state).
@@ -95,6 +112,11 @@ export interface AgentEvents {
   onStreamingStart: () => void;
   onStreamingEnd: () => void;
   onError: (error: Error) => void;
+
+  // Subagent lifecycle events.
+  onSubagentStart?: (toolCallId: string, subagentType: string, subagentId: string) => void;
+  onSubagentStop?: (toolCallId: string, success: boolean, error?: string) => void;
+  onSubagentProgress?: (toolCallId: string, message: string) => void;
 }
 
 // Permission request for tool approval.

@@ -16,6 +16,13 @@ export class ToolCallDisplay {
     this.containerEl.empty();
     this.containerEl.addClass("claude-code-tool-call");
 
+    // Add subagent-specific class for special styling.
+    if (this.toolCall.isSubagent) {
+      this.containerEl.addClass("subagent-task");
+    } else {
+      this.containerEl.removeClass("subagent-task");
+    }
+
     // Handle collapsed/expanded state - must explicitly add/remove class.
     if (this.isExpanded) {
       this.containerEl.removeClass("collapsed");
@@ -41,12 +48,52 @@ export class ToolCallDisplay {
 
     // Status indicator.
     const statusEl = headerEl.createSpan({ cls: "claude-code-tool-call-status" });
-    statusEl.addClass(this.toolCall.status);
+    statusEl.addClass(this.getStatusClass());
     statusEl.setText(this.getStatusText());
+
+    // Subagent progress indicator (shown when subagent is running).
+    if (this.toolCall.isSubagent && this.isSubagentRunning()) {
+      this.renderSubagentProgress();
+    }
 
     // Content (input/output details).
     this.contentEl = this.containerEl.createDiv({ cls: "claude-code-tool-call-content" });
     this.renderContent();
+  }
+
+  // Render progress indicator for running subagents.
+  private renderSubagentProgress() {
+    const progressEl = this.containerEl.createDiv({ cls: "claude-code-subagent-progress" });
+
+    // Animated spinner.
+    progressEl.createSpan({ cls: "subagent-spinner" });
+
+    // Status message.
+    const messageEl = progressEl.createSpan({ cls: "subagent-message" });
+    messageEl.setText(this.toolCall.subagentProgress?.message || "Running...");
+
+    // Duration timer.
+    if (this.toolCall.subagentProgress?.startTime) {
+      const duration = Date.now() - this.toolCall.subagentProgress.startTime;
+      const durationEl = progressEl.createSpan({ cls: "subagent-duration" });
+      durationEl.setText(this.formatDuration(duration));
+    }
+  }
+
+  // Check if subagent is in a running state.
+  private isSubagentRunning(): boolean {
+    const status = this.toolCall.subagentStatus;
+    return status === "starting" || status === "running" || status === "thinking";
+  }
+
+  // Format duration in human-readable format.
+  private formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
   }
 
   private renderContent() {
@@ -150,6 +197,27 @@ export class ToolCallDisplay {
   }
 
   private getStatusText(): string {
+    // For subagents, use the subagent-specific status.
+    if (this.toolCall.isSubagent && this.toolCall.subagentStatus) {
+      switch (this.toolCall.subagentStatus) {
+        case "starting":
+          return "starting...";
+        case "running":
+          return "running...";
+        case "thinking":
+          return "thinking...";
+        case "completed":
+          return "✓";
+        case "interrupted":
+          return "⚠ interrupted";
+        case "error":
+          return "✗";
+        default:
+          break;
+      }
+    }
+
+    // Fallback to standard tool status.
     switch (this.toolCall.status) {
       case "pending":
         return "pending";
@@ -162,6 +230,15 @@ export class ToolCallDisplay {
       default:
         return "";
     }
+  }
+
+  // Get CSS class for status indicator.
+  private getStatusClass(): string {
+    // For subagents, use the subagent-specific status class.
+    if (this.toolCall.isSubagent && this.toolCall.subagentStatus) {
+      return this.toolCall.subagentStatus;
+    }
+    return this.toolCall.status;
   }
 
   private toggle() {

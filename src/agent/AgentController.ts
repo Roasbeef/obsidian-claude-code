@@ -1,7 +1,7 @@
 import { query, SDKMessage, SDKAssistantMessage, SDKResultMessage, SDKSystemMessage, SDKPartialAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
 import type ClaudeCodePlugin from "../main";
-import { ChatMessage, ToolCall, AgentEvents } from "../types";
+import { ChatMessage, ToolCall, AgentEvents, SubagentProgress } from "../types";
 import { createObsidianMcpServer, ObsidianMcpServerInstance } from "./ObsidianMcpServer";
 import { logger } from "../utils/Logger";
 
@@ -32,6 +32,12 @@ export class AgentController {
   // Permission memory for "remember this session".
   private approvedTools: Set<string> = new Set();
 
+  // Subagent tracking: maps SDK subagentId to our toolCallId.
+  private pendingSubagents: Map<string, string> = new Map();
+
+  // Track current tool calls for subagent matching.
+  private currentToolCalls: ToolCall[] = [];
+
   constructor(plugin: ClaudeCodePlugin) {
     this.plugin = plugin;
     this.app = plugin.app;
@@ -57,6 +63,7 @@ export class AgentController {
     this.events.onStreamingStart?.();
 
     const toolCalls: ToolCall[] = [];
+    this.currentToolCalls = toolCalls;  // Store reference for subagent matching.
     let finalContent = "";
     let messageId = this.generateId();
 
@@ -128,6 +135,9 @@ export class AgentController {
           canUseTool: async (toolName, input) => {
             return this.handlePermission(toolName, input);
           },
+
+          // Note: SDK hooks use shell command matchers, not inline callbacks.
+          // Subagent lifecycle is tracked through tool call state transitions.
         },
       })) {
         logger.debug("AgentController", "Received SDK message", { type: message.type, subtype: (message as any).subtype });
@@ -153,6 +163,17 @@ export class AgentController {
               if (tc.status === "running") {
                 tc.status = "success";
                 tc.endTime = Date.now();
+
+                // Handle subagent completion.
+                if (tc.isSubagent) {
+                  tc.subagentStatus = "completed";
+                  if (tc.subagentProgress) {
+                    tc.subagentProgress.message = "Completed";
+                    tc.subagentProgress.lastUpdate = Date.now();
+                  }
+                  this.events.onSubagentStop?.(tc.id, true, undefined);
+                }
+
                 this.events.onToolResult?.(tc.id, "", false);
               }
             }
@@ -214,6 +235,16 @@ export class AgentController {
               if (tc.status === "running") {
                 tc.status = "error";
                 tc.endTime = Date.now();
+
+                // Handle subagent error.
+                if (tc.isSubagent) {
+                  tc.subagentStatus = "error";
+                  if (tc.subagentProgress) {
+                    tc.subagentProgress.message = "Error during execution";
+                    tc.subagentProgress.lastUpdate = Date.now();
+                  }
+                  this.events.onSubagentStop?.(tc.id, false, "Error during execution");
+                }
               }
             }
 
@@ -270,13 +301,42 @@ export class AgentController {
       if (block.type === "text") {
         text += block.text;
       } else if (block.type === "tool_use") {
-        tools.push({
+        const toolCall: ToolCall = {
           id: block.id,
           name: block.name,
           input: block.input as Record<string, unknown>,
           status: "running",
           startTime: Date.now(),
-        });
+        };
+
+        // Detect Task tools and initialize subagent tracking.
+        if (block.name === "Task") {
+          const input = block.input as Record<string, unknown>;
+          const subagentType = (input.subagent_type as string) || "unknown";
+
+          toolCall.isSubagent = true;
+          toolCall.subagentType = subagentType;
+          toolCall.subagentStatus = "running";  // Start as running since the task is executing.
+          toolCall.subagentProgress = {
+            message: `${subagentType} agent running...`,
+            startTime: Date.now(),
+            lastUpdate: Date.now(),
+          };
+
+          logger.info("AgentController", "Task tool detected", {
+            toolCallId: toolCall.id,
+            subagentType: toolCall.subagentType,
+            description: input.description,
+          });
+
+          // Emit subagent start event for UI update.
+          // Use setTimeout to ensure the tool call is added to the list first.
+          setTimeout(() => {
+            this.events.onSubagentStart?.(toolCall.id, subagentType, toolCall.id);
+          }, 0);
+        }
+
+        tools.push(toolCall);
       }
     }
 
@@ -427,9 +487,123 @@ export class AgentController {
     });
   }
 
+  // Handle SubagentStart hook event.
+  private handleSubagentStart(event: any) {
+    const { subagent_id, subagent_type, task_description } = event;
+    logger.info("AgentController", "SubagentStart hook fired", {
+      subagentId: subagent_id,
+      subagentType: subagent_type,
+      description: task_description?.slice(0, 100),
+    });
+
+    // Find the Task tool call that matches this subagent.
+    const toolCall = this.findToolCallForSubagent(task_description, subagent_type);
+    if (toolCall) {
+      this.pendingSubagents.set(subagent_id, toolCall.id);
+      toolCall.subagentId = subagent_id;
+      toolCall.subagentStatus = "running";
+      if (toolCall.subagentProgress) {
+        toolCall.subagentProgress.message = `${subagent_type} agent running...`;
+        toolCall.subagentProgress.lastUpdate = Date.now();
+      }
+
+      // Emit event for UI update.
+      this.events.onSubagentStart?.(toolCall.id, subagent_type || "unknown", subagent_id);
+      logger.info("AgentController", "Matched subagent to tool call", {
+        toolCallId: toolCall.id,
+        subagentId: subagent_id,
+      });
+    } else {
+      logger.warn("AgentController", "Could not match subagent to tool call", {
+        subagentId: subagent_id,
+        description: task_description,
+      });
+    }
+  }
+
+  // Handle SubagentStop hook event.
+  private handleSubagentStop(event: any) {
+    const { subagent_id, success, error } = event;
+    logger.info("AgentController", "SubagentStop hook fired", {
+      subagentId: subagent_id,
+      success,
+      error,
+    });
+
+    const toolCallId = this.pendingSubagents.get(subagent_id);
+    if (toolCallId) {
+      // Find the tool call and update its status.
+      const toolCall = this.currentToolCalls.find((tc) => tc.id === toolCallId);
+      if (toolCall) {
+        toolCall.subagentStatus = success ? "completed" : "error";
+        if (error && !toolCall.error) {
+          toolCall.error = error;
+        }
+        if (toolCall.subagentProgress) {
+          toolCall.subagentProgress.message = success ? "Completed" : `Error: ${error || "Unknown error"}`;
+          toolCall.subagentProgress.lastUpdate = Date.now();
+        }
+      }
+
+      // Emit event for UI update.
+      this.events.onSubagentStop?.(toolCallId, success, error);
+      this.pendingSubagents.delete(subagent_id);
+
+      logger.info("AgentController", "Subagent stopped", {
+        toolCallId,
+        subagentId: subagent_id,
+        success,
+      });
+    } else {
+      logger.warn("AgentController", "SubagentStop for unknown subagent", { subagentId: subagent_id });
+    }
+  }
+
+  // Find a Task tool call that matches a subagent by description or type.
+  private findToolCallForSubagent(description?: string, subagentType?: string): ToolCall | undefined {
+    // Look for Task tool calls that are in "starting" state (not yet matched).
+    for (const tc of this.currentToolCalls) {
+      if (tc.isSubagent && tc.subagentStatus === "starting" && !tc.subagentId) {
+        // Match by subagent type if provided.
+        if (subagentType && tc.subagentType === subagentType) {
+          return tc;
+        }
+        // Match by description similarity if provided.
+        if (description) {
+          const tcDesc = (tc.input.description as string) || "";
+          if (tcDesc && description.includes(tcDesc.slice(0, 50))) {
+            return tc;
+          }
+        }
+        // Fallback: return the first unmatched Task.
+        return tc;
+      }
+    }
+    return undefined;
+  }
+
   // Cancel the current streaming request.
   cancelStream() {
     if (this.abortController) {
+      // Mark any running subagents as interrupted.
+      for (const [subagentId, toolCallId] of this.pendingSubagents) {
+        logger.info("AgentController", "Interrupting subagent due to cancellation", { subagentId, toolCallId });
+
+        // Update the tool call status.
+        const toolCall = this.currentToolCalls.find((tc) => tc.id === toolCallId);
+        if (toolCall) {
+          toolCall.subagentStatus = "interrupted";
+          if (toolCall.subagentProgress) {
+            toolCall.subagentProgress.message = "Cancelled by user";
+            toolCall.subagentProgress.lastUpdate = Date.now();
+          }
+        }
+
+        // Emit stop event.
+        this.events.onSubagentStop?.(toolCallId, false, "User cancelled");
+      }
+      this.pendingSubagents.clear();
+
       this.abortController.abort();
       this.abortController = null;
     }

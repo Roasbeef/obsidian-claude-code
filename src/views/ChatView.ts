@@ -37,6 +37,12 @@ export class ChatView extends ItemView {
       onStreamingStart: () => this.handleStreamingStart(),
       onStreamingEnd: () => this.handleStreamingEnd(),
       onError: (error) => this.handleError(error),
+
+      // Subagent lifecycle events.
+      onSubagentStart: (toolCallId, subagentType, subagentId) =>
+        this.handleSubagentStart(toolCallId, subagentType, subagentId),
+      onSubagentStop: (toolCallId, success, error) =>
+        this.handleSubagentStop(toolCallId, success, error),
     });
   }
 
@@ -312,6 +318,56 @@ export class ChatView extends ItemView {
         }
       }
     }
+  }
+
+  private handleSubagentStart(toolCallId: string, subagentType: string, subagentId: string) {
+    logger.debug("ChatView", "Subagent started", { toolCallId, subagentType, subagentId });
+
+    // Find the message containing this tool call.
+    const message = this.findMessageWithToolCall(toolCallId);
+    if (message) {
+      const toolCall = message.toolCalls?.find((tc) => tc.id === toolCallId);
+      if (toolCall) {
+        toolCall.subagentStatus = "running";
+        toolCall.subagentId = subagentId;
+        if (toolCall.subagentProgress) {
+          toolCall.subagentProgress.message = `${subagentType} agent running...`;
+          toolCall.subagentProgress.lastUpdate = Date.now();
+        }
+        this.messageList.render(this.messages);
+        this.scrollToBottom();
+      }
+    }
+  }
+
+  private handleSubagentStop(toolCallId: string, success: boolean, error?: string) {
+    logger.debug("ChatView", "Subagent stopped", { toolCallId, success, error });
+
+    // Find the message containing this tool call.
+    const message = this.findMessageWithToolCall(toolCallId);
+    if (message) {
+      const toolCall = message.toolCalls?.find((tc) => tc.id === toolCallId);
+      if (toolCall) {
+        toolCall.subagentStatus = success ? "completed" : "error";
+        if (error) {
+          toolCall.error = error;
+        }
+        if (toolCall.subagentProgress) {
+          toolCall.subagentProgress.message = success ? "Completed" : `Error: ${error || "Unknown error"}`;
+          toolCall.subagentProgress.lastUpdate = Date.now();
+        }
+        this.messageList.render(this.messages);
+      }
+    }
+  }
+
+  private findMessageWithToolCall(toolCallId: string): ChatMessage | undefined {
+    for (const message of this.messages) {
+      if (message.toolCalls?.some((tc) => tc.id === toolCallId)) {
+        return message;
+      }
+    }
+    return undefined;
   }
 
   private handleStreamingStart() {
