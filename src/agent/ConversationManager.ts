@@ -2,6 +2,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import type ClaudeCodePlugin from "../main";
 import { Conversation, ChatMessage } from "../types";
 import { logger } from "../utils/Logger";
+import { generateTitleWithHaiku } from "../utils/formatting";
 
 // Storage directory name within the vault.
 const STORAGE_DIR = ".obsidian-claude-code";
@@ -199,9 +200,10 @@ export class ConversationManager {
     this.currentConversation!.messageCount++;
     this.currentConversation!.updatedAt = Date.now();
 
-    // Auto-generate title from first user message.
-    if (this.currentConversation!.messageCount === 1 && displayMessage.role === "user") {
-      this.currentConversation!.title = this.generateTitle(displayMessage.content);
+    // Auto-generate title after first assistant response using Haiku.
+    // Wait until messageCount === 2 (first user + first assistant).
+    if (this.currentConversation!.messageCount === 2 && displayMessage.role === "assistant") {
+      await this.generateConversationTitle();
     }
 
     logger.debug("ConversationManager", "Saving conversation");
@@ -385,13 +387,121 @@ export class ConversationManager {
     return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 
-  // Generate a title from message content.
-  private generateTitle(content: string): string {
-    // Take first 50 chars of first line.
+  // Generate a title for the current conversation using Haiku.
+  private async generateConversationTitle() {
+    if (!this.currentConversation) return;
+
+    const messages = this.currentConversation.displayMessages;
+    if (messages.length < 2) return;
+
+    // Get first user and assistant messages
+    const firstUser = messages.find((m) => m.role === "user");
+    const firstAssistant = messages.find((m) => m.role === "assistant");
+
+    if (!firstUser || !firstAssistant) {
+      logger.debug("ConversationManager", "Missing user or assistant message for title generation");
+      return;
+    }
+
+    logger.debug("ConversationManager", "Generating title with Haiku");
+
+    try {
+      // Get API key and Claude executable path from plugin
+      const apiKey = this.plugin.settings.apiKey || process.env.ANTHROPIC_API_KEY;
+      const claudeExecutable = this.findClaudeExecutable();
+
+      // Try to generate title with Haiku
+      const haikuTitle = await generateTitleWithHaiku(
+        firstUser.content,
+        firstAssistant.content,
+        apiKey,
+        claudeExecutable
+      );
+
+      if (haikuTitle) {
+        this.currentConversation.title = haikuTitle;
+        logger.info("ConversationManager", "Generated title with Haiku", { title: haikuTitle });
+      } else {
+        // Fall back to simple title generation
+        this.currentConversation.title = this.generateSimpleTitle(firstUser.content);
+        logger.debug("ConversationManager", "Fell back to simple title generation");
+      }
+    } catch (error) {
+      logger.warn("ConversationManager", "Failed to generate title with Haiku", { error: String(error) });
+      // Fall back to simple title generation
+      this.currentConversation.title = this.generateSimpleTitle(firstUser.content);
+    }
+  }
+
+  // Generate a simple title from message content (fallback method).
+  private generateSimpleTitle(content: string): string {
     const firstLine = content.split("\n")[0];
     if (firstLine.length <= 50) {
       return firstLine;
     }
     return firstLine.slice(0, 47) + "...";
+  }
+
+  // Find the Claude Code executable path (copied from AgentController).
+  private findClaudeExecutable(): string | undefined {
+    const fs = require("fs");
+    const path = require("path");
+    const os = require("os");
+    const homeDir = os.homedir();
+
+    // Common locations to check.
+    const possiblePaths = [
+      // User's npm global bin from NVM_BIN env var.
+      process.env.NVM_BIN ? `${process.env.NVM_BIN}/claude` : null,
+
+      // Common nvm paths - check multiple node versions.
+      `${homeDir}/.nvm/versions/node/v20.11.1/bin/claude`,
+      `${homeDir}/.nvm/versions/node/v22.0.0/bin/claude`,
+      `${homeDir}/.nvm/versions/node/v21.0.0/bin/claude`,
+      `${homeDir}/.nvm/versions/node/v18.0.0/bin/claude`,
+
+      // npm global without nvm.
+      `${homeDir}/.npm-global/bin/claude`,
+      `${homeDir}/npm/bin/claude`,
+
+      // Standard npm global.
+      "/usr/local/bin/claude",
+
+      // Homebrew on macOS.
+      "/opt/homebrew/bin/claude",
+
+      // Linux global.
+      "/usr/bin/claude",
+    ].filter(Boolean) as string[];
+
+    // Also check all nvm versions dynamically.
+    const nvmDir = `${homeDir}/.nvm/versions/node`;
+    try {
+      if (fs.existsSync(nvmDir)) {
+        const versions = fs.readdirSync(nvmDir);
+        for (const ver of versions) {
+          const claudePath = path.join(nvmDir, ver, "bin", "claude");
+          if (!possiblePaths.includes(claudePath)) {
+            possiblePaths.push(claudePath);
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore.
+    }
+
+    // Check if any exist.
+    for (const p of possiblePaths) {
+      try {
+        if (fs.existsSync(p)) {
+          return p;
+        }
+      } catch (e) {
+        // Ignore.
+      }
+    }
+
+    // If not found, return undefined and let the SDK handle it.
+    return undefined;
   }
 }

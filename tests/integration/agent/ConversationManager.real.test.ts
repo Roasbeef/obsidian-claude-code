@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // Import the actual ConversationManager class.
 import { ConversationManager } from "../../../src/agent/ConversationManager";
 import { createMockPlugin } from "../../helpers/factories";
+import * as formatting from "../../../src/utils/formatting";
 
 describe("ConversationManager (real)", () => {
   let manager: ConversationManager;
@@ -24,6 +25,9 @@ describe("ConversationManager (real)", () => {
     });
     mockPlugin.app.vault.getAbstractFileByPath.mockReturnValue(null);
     mockPlugin.app.vault.createFolder.mockResolvedValue(undefined);
+
+    // Mock generateTitleWithHaiku to return null (fall back to simple title generation).
+    vi.spyOn(formatting, "generateTitleWithHaiku").mockResolvedValue(null);
 
     // Create actual ConversationManager instance.
     manager = new ConversationManager(mockPlugin as any);
@@ -96,9 +100,10 @@ describe("ConversationManager (real)", () => {
       expect(messages[0].content).toBe("Hello");
     });
 
-    it("should auto-generate title from first user message", async () => {
+    it("should auto-generate title after first assistant response", async () => {
       await manager.createConversation();
 
+      // Add user message
       await manager.addMessage({
         id: "msg-1",
         role: "user",
@@ -106,17 +111,39 @@ describe("ConversationManager (real)", () => {
         timestamp: Date.now(),
       });
 
-      const conv = manager.getCurrentConversation();
+      // Title should still be default
+      let conv = manager.getCurrentConversation();
+      expect(conv?.title).toBe("Conversation 1");
+
+      // Add assistant response - this triggers title generation
+      await manager.addMessage({
+        id: "msg-2",
+        role: "assistant",
+        content: "The capital of France is Paris.",
+        timestamp: Date.now(),
+      });
+
+      // Now title should be generated (falling back to simple method since Haiku is mocked to return null)
+      conv = manager.getCurrentConversation();
       expect(conv?.title).toBe("What is the capital of France?");
     });
 
     it("should truncate long titles to 50 characters", async () => {
       await manager.createConversation();
 
+      // Add user message
       await manager.addMessage({
         id: "msg-1",
         role: "user",
         content: "This is a very long message that should be truncated because it exceeds fifty characters",
+        timestamp: Date.now(),
+      });
+
+      // Add assistant response to trigger title generation
+      await manager.addMessage({
+        id: "msg-2",
+        role: "assistant",
+        content: "I understand.",
         timestamp: Date.now(),
       });
 
