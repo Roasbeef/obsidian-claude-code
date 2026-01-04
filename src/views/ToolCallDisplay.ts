@@ -1,5 +1,15 @@
 import { setIcon } from "obsidian";
 import { ToolCall } from "../types";
+import { formatDuration } from "../utils/formatting";
+import {
+  getToolDisplayName,
+  getToolInputSummary,
+  getToolStatusText,
+  getToolStatusClass,
+  isSubagentRunning,
+  type SubagentStatus,
+  type ToolStatus,
+} from "../utils/toolDisplay";
 
 export class ToolCallDisplay {
   private containerEl: HTMLElement;
@@ -40,19 +50,27 @@ export class ToolCallDisplay {
 
     // Tool name (with special handling for Skill/Task tools).
     const nameEl = headerEl.createSpan({ cls: "claude-code-tool-call-name" });
-    nameEl.setText(this.getDisplayName());
+    nameEl.setText(getToolDisplayName(this.toolCall.name, this.toolCall.input));
 
     // Brief description of input.
     const descEl = headerEl.createSpan({ cls: "claude-code-tool-call-desc" });
-    descEl.setText(this.getInputSummary());
+    descEl.setText(getToolInputSummary(this.toolCall.name, this.toolCall.input));
 
     // Status indicator.
     const statusEl = headerEl.createSpan({ cls: "claude-code-tool-call-status" });
-    statusEl.addClass(this.getStatusClass());
-    statusEl.setText(this.getStatusText());
+    statusEl.addClass(getToolStatusClass(
+      this.toolCall.status as ToolStatus,
+      !!this.toolCall.isSubagent,
+      this.toolCall.subagentStatus as SubagentStatus | undefined
+    ));
+    statusEl.setText(getToolStatusText(
+      this.toolCall.status as ToolStatus,
+      !!this.toolCall.isSubagent,
+      this.toolCall.subagentStatus as SubagentStatus | undefined
+    ));
 
     // Subagent progress indicator (shown when subagent is running).
-    if (this.toolCall.isSubagent && this.isSubagentRunning()) {
+    if (this.toolCall.isSubagent && isSubagentRunning(this.toolCall.subagentStatus as SubagentStatus | undefined)) {
       this.renderSubagentProgress();
     }
 
@@ -76,24 +94,8 @@ export class ToolCallDisplay {
     if (this.toolCall.subagentProgress?.startTime) {
       const duration = Date.now() - this.toolCall.subagentProgress.startTime;
       const durationEl = progressEl.createSpan({ cls: "subagent-duration" });
-      durationEl.setText(this.formatDuration(duration));
+      durationEl.setText(formatDuration(duration));
     }
-  }
-
-  // Check if subagent is in a running state.
-  private isSubagentRunning(): boolean {
-    const status = this.toolCall.subagentStatus;
-    return status === "starting" || status === "running" || status === "thinking";
-  }
-
-  // Format duration in human-readable format.
-  private formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms}ms`;
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
   }
 
   private renderContent() {
@@ -131,114 +133,6 @@ export class ToolCallDisplay {
       const timingEl = this.contentEl.createDiv({ cls: "claude-code-tool-call-timing" });
       timingEl.setText(`Duration: ${duration}ms`);
     }
-  }
-
-  // Get a friendly display name for the tool.
-  private getDisplayName(): string {
-    const name = this.toolCall.name;
-    const input = this.toolCall.input;
-
-    // For Skill tool, show which skill is being invoked.
-    if (name === "Skill" && input.skill) {
-      return `Skill: ${input.skill}`;
-    }
-
-    // For Task/subagent tool, show the agent type.
-    if (name === "Task" && input.subagent_type) {
-      return `Task: ${input.subagent_type}`;
-    }
-
-    // For MCP tools, make the name more readable.
-    if (name.startsWith("mcp__obsidian__")) {
-      const shortName = name.replace("mcp__obsidian__", "");
-      return shortName.replace(/_/g, " ");
-    }
-
-    return name;
-  }
-
-  private getInputSummary(): string {
-    const input = this.toolCall.input;
-    const name = this.toolCall.name;
-
-    // Special handling for Skill - show the skill description.
-    if (name === "Skill" && input.args) {
-      const args = String(input.args);
-      return args.length > 40 ? args.slice(0, 40) + "..." : args;
-    }
-
-    // Special handling for Task - show the description.
-    if (name === "Task" && input.description) {
-      return String(input.description);
-    }
-
-    // Try to get a meaningful summary based on common input patterns.
-    if (input.file_path) {
-      return String(input.file_path).split("/").pop() || "";
-    }
-    if (input.path) {
-      return String(input.path).split("/").pop() || "";
-    }
-    if (input.pattern) {
-      return String(input.pattern);
-    }
-    if (input.command) {
-      const cmd = String(input.command);
-      return cmd.length > 30 ? cmd.slice(0, 30) + "..." : cmd;
-    }
-    if (input.query) {
-      const q = String(input.query);
-      return q.length > 30 ? q.slice(0, 30) + "..." : q;
-    }
-
-    // Fallback: show number of keys.
-    const keys = Object.keys(input);
-    return keys.length > 0 ? `${keys.length} params` : "";
-  }
-
-  private getStatusText(): string {
-    // For subagents, use the subagent-specific status.
-    if (this.toolCall.isSubagent && this.toolCall.subagentStatus) {
-      switch (this.toolCall.subagentStatus) {
-        case "starting":
-          return "starting...";
-        case "running":
-          return "running...";
-        case "thinking":
-          return "thinking...";
-        case "completed":
-          return "✓";
-        case "interrupted":
-          return "⚠ interrupted";
-        case "error":
-          return "✗";
-        default:
-          break;
-      }
-    }
-
-    // Fallback to standard tool status.
-    switch (this.toolCall.status) {
-      case "pending":
-        return "pending";
-      case "running":
-        return "running...";
-      case "success":
-        return "✓";
-      case "error":
-        return "✗";
-      default:
-        return "";
-    }
-  }
-
-  // Get CSS class for status indicator.
-  private getStatusClass(): string {
-    // For subagents, use the subagent-specific status class.
-    if (this.toolCall.isSubagent && this.toolCall.subagentStatus) {
-      return this.toolCall.subagentStatus;
-    }
-    return this.toolCall.status;
   }
 
   private toggle() {

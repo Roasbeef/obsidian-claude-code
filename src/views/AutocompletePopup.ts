@@ -1,60 +1,12 @@
 import { setIcon } from "obsidian";
 import type ClaudeCodePlugin from "../main";
-
-// Suggestion item for autocomplete.
-interface Suggestion {
-  type: "command" | "file";
-  value: string;
-  label: string;
-  description?: string;
-  icon?: string;
-}
-
-// Built-in slash commands.
-const SLASH_COMMANDS: Suggestion[] = [
-  {
-    type: "command",
-    value: "/help",
-    label: "/help",
-    description: "Show available commands",
-    icon: "help-circle",
-  },
-  {
-    type: "command",
-    value: "/clear",
-    label: "/clear",
-    description: "Clear conversation history",
-    icon: "trash-2",
-  },
-  {
-    type: "command",
-    value: "/new",
-    label: "/new",
-    description: "Start a new conversation",
-    icon: "plus",
-  },
-  {
-    type: "command",
-    value: "/file",
-    label: "/file [path]",
-    description: "Read a file into context",
-    icon: "file-text",
-  },
-  {
-    type: "command",
-    value: "/search",
-    label: "/search [query]",
-    description: "Search vault for text",
-    icon: "search",
-  },
-  {
-    type: "command",
-    value: "/context",
-    label: "/context",
-    description: "Show current context",
-    icon: "info",
-  },
-];
+import {
+  SLASH_COMMANDS,
+  filterCommands,
+  nextIndex,
+  prevIndex,
+  type Suggestion,
+} from "../utils/autocomplete";
 
 export class AutocompletePopup {
   private plugin: ClaudeCodePlugin;
@@ -107,13 +59,13 @@ export class AutocompletePopup {
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        this.selectedIndex = (this.selectedIndex + 1) % this.suggestions.length;
+        this.selectedIndex = nextIndex(this.selectedIndex, this.suggestions.length);
         this.updateSelection();
         return true;
 
       case "ArrowUp":
         e.preventDefault();
-        this.selectedIndex = (this.selectedIndex - 1 + this.suggestions.length) % this.suggestions.length;
+        this.selectedIndex = prevIndex(this.selectedIndex, this.suggestions.length);
         this.updateSelection();
         return true;
 
@@ -143,11 +95,7 @@ export class AutocompletePopup {
 
   // Get matching slash commands.
   private getCommandSuggestions(query: string): Suggestion[] {
-    const q = query.toLowerCase();
-    return SLASH_COMMANDS.filter((cmd) =>
-      cmd.value.toLowerCase().includes(q) ||
-      cmd.description?.toLowerCase().includes(q)
-    );
+    return filterCommands(SLASH_COMMANDS, query);
   }
 
   // Get matching files from vault.
