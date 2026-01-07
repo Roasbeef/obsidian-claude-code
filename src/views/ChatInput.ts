@@ -7,6 +7,7 @@ interface ChatInputOptions {
   onSend: (message: string) => void;
   onCancel: () => void;
   isStreaming: () => boolean;
+  getQueueLength?: () => number;  // Get number of queued messages.
   onCommand?: (command: string) => void;
   plugin: ClaudeCodePlugin;
 }
@@ -18,6 +19,7 @@ export class ChatInput {
   private options: ChatInputOptions;
   private fileContexts: string[] = [];
   private autocomplete: AutocompletePopup;
+  private isSending = false;  // Guard against double-send.
 
   constructor(parentEl: HTMLElement, options: ChatInputOptions) {
     this.containerEl = parentEl;
@@ -99,15 +101,12 @@ export class ChatInput {
       return;
     }
 
-    // Send on Enter (without Shift).
+    // Send on Enter (without Shift). Can queue messages while streaming.
     if (e.key === "Enter" && !e.shiftKey) {
       logger.info("ChatInput", "Enter pressed, calling handleSend", { isStreaming: this.options.isStreaming() });
       e.preventDefault();
-      if (this.options.isStreaming()) {
-        this.options.onCancel();
-      } else {
-        this.handleSend();
-      }
+      // Always allow sending - will be queued if streaming.
+      this.handleSend();
       return;
     }
 
@@ -206,6 +205,13 @@ export class ChatInput {
 
   private handleSend() {
     logger.info("ChatInput", "handleSend called");
+
+    // Guard against double-send (e.g., rapid Enter key or click+Enter race).
+    if (this.isSending) {
+      logger.warn("ChatInput", "Already sending, ignoring duplicate");
+      return;
+    }
+
     const message = this.textareaEl.value.trim();
     logger.debug("ChatInput", "Message content", { length: message.length, preview: message.slice(0, 50) });
 
@@ -213,6 +219,8 @@ export class ChatInput {
       logger.warn("ChatInput", "Empty message, not sending");
       return;
     }
+
+    this.isSending = true;
 
     // Include file contexts in message if any.
     let fullMessage = message;
@@ -228,6 +236,12 @@ export class ChatInput {
     this.textareaEl.value = "";
     this.autoResize();
     this.autocomplete.hide();
+
+    // Reset guard after a short delay to allow for next message.
+    setTimeout(() => {
+      this.isSending = false;
+    }, 100);
+
     logger.info("ChatInput", "handleSend completed");
   }
 
@@ -287,11 +301,19 @@ export class ChatInput {
 
   updateState() {
     const streaming = this.options.isStreaming();
-    this.sendButtonEl.disabled = streaming;
+    const queueLength = this.options.getQueueLength?.() ?? 0;
+
+    // Always allow sending - messages will be queued while streaming.
+    this.sendButtonEl.disabled = false;
 
     if (streaming) {
-      setIcon(this.sendButtonEl, "square");
-      this.textareaEl.placeholder = "Press Escape to cancel...";
+      // Show queue-aware icon and placeholder.
+      setIcon(this.sendButtonEl, "plus-circle");  // Indicates "add to queue".
+      if (queueLength > 0) {
+        this.textareaEl.placeholder = `${queueLength} message${queueLength > 1 ? "s" : ""} queued. Type to add more...`;
+      } else {
+        this.textareaEl.placeholder = "Type to queue message while Claude works...";
+      }
     } else {
       setIcon(this.sendButtonEl, "send");
       this.textareaEl.placeholder = "Ask about your vault...";

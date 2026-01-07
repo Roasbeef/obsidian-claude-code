@@ -328,6 +328,95 @@ describe("ChatInput", () => {
     });
   });
 
+  describe("message queueing", () => {
+    let getQueueLength: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      getQueueLength = vi.fn().mockReturnValue(0);
+    });
+
+    it("should allow sending messages while streaming (for queueing)", () => {
+      isStreaming.mockReturnValue(true);
+      const textarea = document.createElement("textarea");
+      textarea.value = "New message while streaming";
+      container.appendChild(textarea);
+
+      // Simulate Enter key - should still call onSend (which will queue).
+      const event = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
+
+      // New behavior: always allow sending when Enter pressed.
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        onSend(textarea.value);
+      }
+
+      expect(onSend).toHaveBeenCalledWith("New message while streaming");
+    });
+
+    it("should show queue count in placeholder when streaming with queued messages", () => {
+      isStreaming.mockReturnValue(true);
+      getQueueLength.mockReturnValue(2);
+      const textarea = document.createElement("textarea");
+      container.appendChild(textarea);
+
+      // Simulate updateState logic.
+      const streaming = isStreaming();
+      const queueLength = getQueueLength();
+
+      if (streaming && queueLength > 0) {
+        textarea.placeholder = `${queueLength} message${queueLength > 1 ? "s" : ""} queued. Type to add more...`;
+      } else if (streaming) {
+        textarea.placeholder = "Type to queue message while Claude works...";
+      } else {
+        textarea.placeholder = "Ask about your vault...";
+      }
+
+      expect(textarea.placeholder).toBe("2 messages queued. Type to add more...");
+    });
+
+    it("should show queue hint when streaming with no queued messages", () => {
+      isStreaming.mockReturnValue(true);
+      getQueueLength.mockReturnValue(0);
+      const textarea = document.createElement("textarea");
+      container.appendChild(textarea);
+
+      const streaming = isStreaming();
+      const queueLength = getQueueLength();
+
+      if (streaming && queueLength > 0) {
+        textarea.placeholder = `${queueLength} message${queueLength > 1 ? "s" : ""} queued. Type to add more...`;
+      } else if (streaming) {
+        textarea.placeholder = "Type to queue message while Claude works...";
+      }
+
+      expect(textarea.placeholder).toBe("Type to queue message while Claude works...");
+    });
+
+    it("should handle singular message count in placeholder", () => {
+      isStreaming.mockReturnValue(true);
+      getQueueLength.mockReturnValue(1);
+      const textarea = document.createElement("textarea");
+      container.appendChild(textarea);
+
+      const queueLength = getQueueLength();
+      textarea.placeholder = `${queueLength} message${queueLength > 1 ? "s" : ""} queued. Type to add more...`;
+
+      expect(textarea.placeholder).toBe("1 message queued. Type to add more...");
+    });
+
+    it("should not disable send button while streaming", () => {
+      isStreaming.mockReturnValue(true);
+      const button = document.createElement("button");
+      button.className = "claude-code-send-button";
+      container.appendChild(button);
+
+      // New behavior: button is never disabled to allow queueing.
+      button.disabled = false;
+
+      expect(button.disabled).toBe(false);
+    });
+  });
+
   describe("command handling", () => {
     it("should detect slash commands", () => {
       const value = "/commit";

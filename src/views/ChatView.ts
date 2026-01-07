@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf, setIcon, Menu, ViewStateResult } from "obsidian";
-import { CHAT_VIEW_TYPE, ChatMessage, ToolCall, Conversation, ErrorType } from "../types";
+import { CHAT_VIEW_TYPE, ChatMessage, ToolCall, Conversation, ErrorType, QueuedMessage } from "../types";
 import type ClaudeCodePlugin from "../main";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
@@ -12,10 +12,12 @@ export class ChatView extends ItemView {
   plugin: ClaudeCodePlugin;
   private headerEl!: HTMLElement;
   private messagesContainerEl!: HTMLElement;
+  private queueContainerEl!: HTMLElement;
   private inputContainerEl!: HTMLElement;
   private messageList!: MessageList;
   private chatInput!: ChatInput;
   private messages: ChatMessage[] = [];
+  private messageQueue: QueuedMessage[] = [];  // Queue for messages sent while streaming.
   private isStreaming = false;
   private agentController: AgentController;
   private conversationManager: ConversationManager;
@@ -364,11 +366,16 @@ export class ChatView extends ItemView {
   }
 
   private renderInputArea() {
+    // Queue container (before input, shows queued messages).
+    this.queueContainerEl = this.contentEl.createDiv({ cls: "claude-code-queue-container" });
+    this.queueContainerEl.style.display = "none";
+
     this.inputContainerEl = this.contentEl.createDiv({ cls: "claude-code-input-container" });
     this.chatInput = new ChatInput(this.inputContainerEl, {
       onSend: (message) => this.handleSendMessage(message),
       onCancel: () => this.handleCancelStreaming(),
       isStreaming: () => this.isStreaming,
+      getQueueLength: () => this.messageQueue.length,
       plugin: this.plugin,
     });
   }
@@ -376,8 +383,15 @@ export class ChatView extends ItemView {
   private async handleSendMessage(content: string) {
     logger.info("ChatView", "handleSendMessage called", { contentLength: content.length, preview: content.slice(0, 50) });
 
-    if (!content.trim() || this.isStreaming) {
-      logger.warn("ChatView", "Early return from handleSendMessage", { empty: !content.trim(), isStreaming: this.isStreaming });
+    if (!content.trim()) {
+      logger.warn("ChatView", "Early return from handleSendMessage - empty content");
+      return;
+    }
+
+    // Queue message if currently streaming (async message queueing like CLI).
+    if (this.isStreaming) {
+      logger.info("ChatView", "Queueing message while streaming", { contentLength: content.length });
+      this.queueMessage(content.trim());
       return;
     }
 
@@ -493,6 +507,11 @@ export class ChatView extends ItemView {
       this.streamingMessageId = null;
       this.activeStreamConversationId = null;
       this.chatInput.updateState();
+
+      // Process queued messages after a microtask to avoid stack issues.
+      if (this.messageQueue.length > 0) {
+        queueMicrotask(() => this.processQueue());
+      }
     }
   }
 
@@ -624,6 +643,8 @@ export class ChatView extends ItemView {
   }
 
   private handleStreamingEnd() {
+    // Note: Queue processing is handled in handleSendMessage's finally block
+    // to avoid race conditions with async message handling.
     this.isStreaming = false;
     this.chatInput.updateState();
   }
@@ -645,6 +666,81 @@ export class ChatView extends ItemView {
     this.isStreaming = false;
     this.streamingMessageId = null;
     this.chatInput.updateState();
+  }
+
+  // Queue a message to be sent after current streaming completes.
+  private queueMessage(content: string) {
+    const queuedMessage: QueuedMessage = {
+      id: this.generateId(),
+      content,
+      timestamp: Date.now(),
+    };
+    this.messageQueue.push(queuedMessage);
+    logger.info("ChatView", "Message queued", { id: queuedMessage.id, queueLength: this.messageQueue.length });
+    this.renderQueuedMessages();
+    this.chatInput.updateState();
+  }
+
+  // Remove a queued message by ID.
+  private removeQueuedMessage(id: string) {
+    const index = this.messageQueue.findIndex((m) => m.id === id);
+    if (index !== -1) {
+      this.messageQueue.splice(index, 1);
+      logger.info("ChatView", "Queued message removed", { id, queueLength: this.messageQueue.length });
+      this.renderQueuedMessages();
+      this.chatInput.updateState();
+    }
+  }
+
+  // Process the next queued message after streaming ends.
+  private async processQueue() {
+    if (this.messageQueue.length === 0) {
+      return;
+    }
+
+    const nextMessage = this.messageQueue.shift();
+    if (nextMessage) {
+      logger.info("ChatView", "Processing queued message", { id: nextMessage.id, remaining: this.messageQueue.length });
+      this.renderQueuedMessages();
+      // Process as a normal message.
+      await this.handleSendMessage(nextMessage.content);
+    }
+  }
+
+  // Render the queued messages UI.
+  private renderQueuedMessages() {
+    // Clear existing queue display.
+    this.queueContainerEl.empty();
+
+    if (this.messageQueue.length === 0) {
+      this.queueContainerEl.style.display = "none";
+      return;
+    }
+
+    this.queueContainerEl.style.display = "block";
+
+    const headerEl = this.queueContainerEl.createDiv({ cls: "claude-code-queue-header" });
+    headerEl.setText(`${this.messageQueue.length} message${this.messageQueue.length > 1 ? "s" : ""} queued`);
+
+    for (const queuedMsg of this.messageQueue) {
+      const itemEl = this.queueContainerEl.createDiv({ cls: "claude-code-queue-item" });
+
+      const contentEl = itemEl.createDiv({ cls: "claude-code-queue-content" });
+      // Truncate long messages for display.
+      const displayContent = queuedMsg.content.length > 100
+        ? queuedMsg.content.slice(0, 100) + "..."
+        : queuedMsg.content;
+      contentEl.setText(displayContent);
+
+      const removeBtn = itemEl.createEl("button", { cls: "claude-code-queue-remove" });
+      setIcon(removeBtn, "x");
+      removeBtn.addEventListener("click", () => this.removeQueuedMessage(queuedMsg.id));
+    }
+  }
+
+  // Get queue length for ChatInput state.
+  getQueueLength(): number {
+    return this.messageQueue.length;
   }
 
   private showError(error: Error) {
