@@ -1,5 +1,12 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type ClaudeCodePlugin from "../main";
+import {
+  isMacOS,
+  isLaunchAgentSetup,
+  setupClaudeOAuthLaunchAgent,
+  removeClaudeOAuthLaunchAgent,
+  getManualSetupCommand,
+} from "../utils/launchAgentHelper";
 
 export class ClaudeCodeSettingTab extends PluginSettingTab {
   plugin: ClaudeCodePlugin;
@@ -56,26 +63,8 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
         }
       });
 
-    // Claude Max subscription info.
-    const authInfoEl = containerEl.createDiv({ cls: "claude-code-auth-info" });
-    authInfoEl.createEl("details", {}, (details) => {
-      details.createEl("summary", { text: "Using Claude Max subscription?" });
-      details.createEl("p", {
-        text: "If you have a Claude Pro or Max subscription, you can use it instead of an API key:",
-      });
-      const steps = details.createEl("ol");
-      steps.createEl("li", {
-        text: "Run 'claude setup-token' in your terminal to authenticate with your subscription",
-      });
-      steps.createEl("li", {
-        text: "This creates a CLAUDE_CODE_OAUTH_TOKEN environment variable",
-      });
-      steps.createEl("li", { text: "Restart Obsidian to pick up the token" });
-      details.createEl("p", {
-        text: "Note: If ANTHROPIC_API_KEY is also set, the API key takes precedence.",
-        cls: "mod-warning",
-      });
-    });
+    // Claude Max subscription setup section.
+    this.renderClaudeMaxSetup(containerEl, hasOAuthToken);
 
     new Setting(containerEl)
       .setName("Model")
@@ -193,6 +182,133 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
     });
     aboutEl.createEl("p", {
       text: "Features: Built-in tools (Read, Write, Bash, Grep), skill loading from .claude/skills/, Obsidian-specific tools (open files, run commands), and semantic vault search.",
+    });
+  }
+
+  // Render the Claude Max subscription setup UI.
+  private renderClaudeMaxSetup(containerEl: HTMLElement, hasOAuthToken: boolean): void {
+    const setupEl = containerEl.createDiv({ cls: "claude-code-claude-max-setup" });
+
+    // If token is already available, show success status.
+    if (hasOAuthToken) {
+      const successEl = setupEl.createDiv({ cls: "claude-code-setup-success" });
+      successEl.createEl("p", {
+        text: "Claude Max subscription is active and working.",
+        cls: "mod-success",
+      });
+
+      // Show option to remove LaunchAgent if it exists.
+      if (isMacOS() && isLaunchAgentSetup()) {
+        new Setting(setupEl)
+          .setName("Automatic login agent")
+          .setDesc("A login agent is configured to set your token automatically at login.")
+          .addButton((button) =>
+            button
+              .setButtonText("Remove")
+              .setWarning()
+              .onClick(async () => {
+                const result = await removeClaudeOAuthLaunchAgent();
+                new Notice(result.message);
+                this.display(); // Re-render.
+              })
+          );
+      }
+      return;
+    }
+
+    // No token available - show setup instructions.
+    setupEl.createEl("details", { attr: { open: "" } }, (details) => {
+      details.createEl("summary", { text: "Claude Max Setup (token not detected)" });
+
+      details.createEl("p", {
+        text: "To use your Claude Pro/Max subscription instead of an API key:",
+      });
+
+      const steps = details.createEl("ol");
+      steps.createEl("li", {
+        text: "Run 'claude setup-token' in Terminal to authenticate",
+      });
+
+      // macOS-specific: Show LaunchAgent setup option.
+      if (isMacOS()) {
+        const launchAgentSetup = isLaunchAgentSetup();
+
+        if (launchAgentSetup) {
+          steps.createEl("li", {
+            text: "Login agent is set up - restart Obsidian to apply",
+          });
+        } else {
+          steps.createEl("li").innerHTML =
+            "Click <strong>Setup Automatic Login</strong> below, or run manually in Terminal";
+        }
+        steps.createEl("li", { text: "Restart Obsidian" });
+
+        // Setup button.
+        if (!launchAgentSetup) {
+          const buttonContainer = details.createDiv({ cls: "claude-code-setup-buttons" });
+
+          const setupBtn = buttonContainer.createEl("button", {
+            text: "Setup Automatic Login",
+            cls: "mod-cta",
+          });
+          setupBtn.addEventListener("click", async () => {
+            setupBtn.disabled = true;
+            setupBtn.textContent = "Setting up...";
+            const result = await setupClaudeOAuthLaunchAgent();
+            new Notice(result.message);
+            this.display(); // Re-render.
+          });
+
+          // Explanation of what it does.
+          const explainEl = buttonContainer.createDiv({ cls: "claude-code-setup-explain" });
+          explainEl.createEl("p", {
+            text: "This creates a login agent that automatically makes your token available to GUI apps like Obsidian after each restart.",
+            cls: "setting-item-description",
+          });
+        }
+
+        // Manual command option.
+        details.createEl("p", {
+          text: "Or run this command manually after each restart:",
+          cls: "setting-item-description",
+        });
+      } else {
+        // Non-macOS: Just show the basic steps.
+        steps.createEl("li", {
+          text: "Set the CLAUDE_CODE_OAUTH_TOKEN environment variable for GUI apps",
+        });
+        steps.createEl("li", { text: "Restart Obsidian" });
+
+        details.createEl("p", {
+          text: "Run this command to make the token available:",
+          cls: "setting-item-description",
+        });
+      }
+
+      // Manual command display with copy button.
+      const manualCommand = getManualSetupCommand();
+      const codeContainer = details.createDiv({ cls: "claude-code-command-container" });
+      const codeEl = codeContainer.createEl("code", {
+        text: manualCommand,
+        cls: "claude-code-command",
+      });
+
+      const copyBtn = codeContainer.createEl("button", {
+        text: "Copy",
+        cls: "claude-code-copy-btn",
+      });
+      copyBtn.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(manualCommand);
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+        }, 2000);
+      });
+
+      details.createEl("p", {
+        text: "Note: If ANTHROPIC_API_KEY is also set, the API key takes precedence.",
+        cls: "mod-warning",
+      });
     });
   }
 }
