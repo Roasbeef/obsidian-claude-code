@@ -56,6 +56,26 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
         }
       });
 
+    // Check for environment variables.
+    const hasEnvBaseUrl = !!process.env.ANTHROPIC_BASE_URL;
+
+    new Setting(containerEl)
+      .setName("Base URL")
+      .setDesc(
+        hasEnvBaseUrl
+          ? "Optional: Override the environment variable with a specific base URL"
+          : "Custom API base URL (e.g., for proxy or custom endpoint)"
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder(hasEnvBaseUrl ? "(using env var)" : "https://api.anthropic.com")
+          .setValue(this.plugin.settings.baseUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.baseUrl = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     // Claude Max subscription info.
     const authInfoEl = containerEl.createDiv({ cls: "claude-code-auth-info" });
     authInfoEl.createEl("details", {}, (details) => {

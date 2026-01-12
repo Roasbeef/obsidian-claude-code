@@ -7,6 +7,7 @@ export const CHAT_VIEW_TYPE = "claude-code-chat-view";
 export interface ClaudeCodeSettings {
   // API Configuration.
   apiKey: string;
+  baseUrl: string;
   model: string;
 
   // Permissions.
@@ -30,6 +31,7 @@ export interface ClaudeCodeSettings {
 // Default settings values.
 export const DEFAULT_SETTINGS: ClaudeCodeSettings = {
   apiKey: "",
+  baseUrl: "",
   model: "sonnet",
   autoApproveVaultReads: true,
   autoApproveVaultWrites: true,  // Default to auto-approve for better UX.

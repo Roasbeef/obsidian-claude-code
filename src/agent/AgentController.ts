@@ -130,16 +130,21 @@ export class AgentController {
     let messageId = this.generateId();
 
     try {
-      // Build environment with API key if set in settings.
+      // Build environment with API key and base URL if set in settings.
       const env: Record<string, string | undefined> = { ...process.env };
       if (this.plugin.settings.apiKey) {
         env.ANTHROPIC_API_KEY = this.plugin.settings.apiKey;
         logger.debug("AgentController", "Using API key from settings");
       }
+      if (this.plugin.settings.baseUrl) {
+        env.ANTHROPIC_BASE_URL = this.plugin.settings.baseUrl;
+        logger.debug("AgentController", "Using base URL from settings", { baseUrl: this.plugin.settings.baseUrl });
+      }
 
       const hasOAuthToken = !!env.CLAUDE_CODE_OAUTH_TOKEN;
       const hasApiKey = !!env.ANTHROPIC_API_KEY;
-      logger.info("AgentController", "Auth status", { hasOAuthToken, hasApiKey, model: this.plugin.settings.model, cwd: this.vaultPath });
+      const hasBaseUrl = !!env.ANTHROPIC_BASE_URL;
+      logger.info("AgentController", "Auth status", { hasOAuthToken, hasApiKey, hasBaseUrl, model: this.plugin.settings.model, cwd: this.vaultPath });
 
       // Find the Claude Code executable path.
       const claudeExecutable = this.findClaudeExecutable();
