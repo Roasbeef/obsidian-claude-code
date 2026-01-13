@@ -946,3 +946,70 @@
 .claude-code-tool-call-status.error {
   color: var(--text-error);
 }
+
+/* Claude Max Setup Section */
+.claude-code-claude-max-setup {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.claude-code-setup-success {
+  padding: 8px 12px;
+  background-color: var(--background-secondary);
+  border-radius: 6px;
+  border-left: 3px solid var(--text-success);
+}
+
+.claude-code-setup-success p {
+  margin: 0;
+}
+
+.claude-code-setup-buttons {
+  margin: 12px 0;
+}
+
+.claude-code-setup-buttons button {
+  margin-right: 8px;
+}
+
+.claude-code-setup-explain {
+  margin-top: 8px;
+}
+
+.claude-code-setup-explain p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.claude-code-command-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background-color: var(--background-secondary);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.claude-code-command {
+  flex: 1;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-normal);
+  word-break: break-all;
+}
+
+.claude-code-copy-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  background-color: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.claude-code-copy-btn:hover {
+  background-color: var(--interactive-hover);
+}
