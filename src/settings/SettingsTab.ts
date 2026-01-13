@@ -1,5 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type ClaudeCodePlugin from "../main";
+import { CHAT_VIEW_TYPE } from "../types";
+import type { ChatView } from "../views/ChatView";
 
 export class ClaudeCodeSettingTab extends PluginSettingTab {
   plugin: ClaudeCodePlugin;
@@ -7,6 +9,16 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: ClaudeCodePlugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+
+  // Refresh all ChatView instances (e.g., after API key change).
+  private refreshChatViews() {
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    for (const leaf of leaves) {
+      if (leaf.view && "refreshView" in leaf.view) {
+        (leaf.view as ChatView).refreshView();
+      }
+    }
   }
 
   display(): void {
@@ -46,6 +58,8 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.apiKey = value;
             await this.plugin.saveSettings();
+            // Refresh ChatViews to pick up the new API key.
+            this.refreshChatViews();
           })
       )
       .then((setting) => {

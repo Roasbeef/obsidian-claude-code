@@ -481,6 +481,16 @@
   margin-top: 12px;
 }
 
+.claude-code-setup-notice .claude-code-refresh-btn {
+  margin-left: 8px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.claude-code-setup-notice .claude-code-refresh-btn:hover {
+  background-color: var(--background-modifier-hover);
+}
+
 /* Conversation List (History) */
 .claude-code-conversation-list {
   padding: 8px;
