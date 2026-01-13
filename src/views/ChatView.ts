@@ -200,6 +200,11 @@ export class ChatView extends ItemView {
       (this.app as any).setting.openTabById("obsidian-claude-code");
     });
 
+    // Collapse sidebar button.
+    const collapseButton = actionsEl.createEl("button", { attr: { "aria-label": "Collapse Sidebar" } });
+    setIcon(collapseButton, "panel-right-close");
+    collapseButton.addEventListener("click", () => this.collapseSidebar());
+
     // Close window button (only show if more than one window).
     const windowCount = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE).length;
     if (windowCount > 1) {
@@ -209,6 +214,14 @@ export class ChatView extends ItemView {
       });
       setIcon(closeButton, "x");
       closeButton.addEventListener("click", () => this.closeThisWindow());
+    }
+  }
+
+  private collapseSidebar() {
+    // Collapse the right sidebar to hide this panel.
+    const rightSplit = this.app.workspace.rightSplit;
+    if (rightSplit && !rightSplit.collapsed) {
+      rightSplit.collapse();
     }
   }
 

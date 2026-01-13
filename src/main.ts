@@ -63,11 +63,14 @@ export default class ClaudeCodePlugin extends Plugin {
     // Register settings tab.
     this.addSettingTab(new ClaudeCodeSettingTab(this.app, this));
 
-    // Auto-open chat view if previously open.
+    // Restore chat view state on layout ready.
+    // Note: We don't auto-reveal here - let Obsidian restore the collapsed state.
+    // The view already exists in the workspace if it was open before.
     this.app.workspace.onLayoutReady(() => {
-      if (this.getExistingChatLeaf()) {
-        // View already exists, ensure it's visible.
-        this.activateChatView();
+      // Just ensure the view is properly initialized, don't force reveal.
+      const existingLeaf = this.getExistingChatLeaf();
+      if (existingLeaf) {
+        logger.debug("Plugin", "Chat view restored from workspace layout");
       }
     });
 
@@ -152,22 +155,22 @@ export default class ClaudeCodePlugin extends Plugin {
     }
   }
 
-  // Toggle chat view visibility.
+  // Toggle chat view visibility by collapsing/expanding the right sidebar.
   async toggleChatView() {
     const existingLeaf = this.getExistingChatLeaf();
+    const rightSplit = this.app.workspace.rightSplit;
 
-    if (existingLeaf) {
-      // Check if it's visible in the right sidebar.
-      const rightSplit = this.app.workspace.rightSplit;
-      if (rightSplit && !rightSplit.collapsed) {
-        // Close it.
-        existingLeaf.detach();
-      } else {
-        // Reveal it.
+    if (existingLeaf && rightSplit) {
+      if (rightSplit.collapsed) {
+        // Sidebar is collapsed, expand it and reveal the chat.
+        rightSplit.expand();
         this.app.workspace.revealLeaf(existingLeaf);
+      } else {
+        // Sidebar is visible, collapse it to hide.
+        rightSplit.collapse();
       }
-    } else {
-      // Open it.
+    } else if (!existingLeaf) {
+      // No chat view exists, create one.
       await this.activateChatView();
     }
   }
