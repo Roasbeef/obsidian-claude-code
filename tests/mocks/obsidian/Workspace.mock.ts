@@ -32,8 +32,8 @@ export function createMockWorkspace(): MockWorkspace {
   return {
     containerEl,
     activeLeaf: mockLeaf,
-    leftSplit: { collapse: vi.fn(), expand: vi.fn() },
-    rightSplit: { collapse: vi.fn(), expand: vi.fn() },
+    leftSplit: { collapsed: false, collapse: vi.fn(), expand: vi.fn() },
+    rightSplit: { collapsed: false, collapse: vi.fn(), expand: vi.fn() },
     rootSplit: {},
     getLeaf: vi.fn().mockReturnValue(mockLeaf),
     getActiveViewOfType: vi.fn().mockReturnValue(null),

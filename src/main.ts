@@ -63,10 +63,14 @@ export default class ClaudeCodePlugin extends Plugin {
     // Register settings tab.
     this.addSettingTab(new ClaudeCodeSettingTab(this.app, this));
 
-    // Auto-open chat view if previously open.
+    // Ensure chat view exists on layout ready.
     this.app.workspace.onLayoutReady(() => {
-      if (this.getExistingChatLeaf()) {
-        // View already exists, ensure it's visible.
+      const existingLeaf = this.getExistingChatLeaf();
+      if (existingLeaf) {
+        logger.debug("Plugin", "Chat view restored from workspace layout");
+      } else {
+        // No existing view - create one in the right sidebar.
+        logger.debug("Plugin", "Creating chat view (none existed)");
         this.activateChatView();
       }
     });
@@ -152,22 +156,22 @@ export default class ClaudeCodePlugin extends Plugin {
     }
   }
 
-  // Toggle chat view visibility.
+  // Toggle chat view visibility by collapsing/expanding the right sidebar.
   async toggleChatView() {
     const existingLeaf = this.getExistingChatLeaf();
+    const rightSplit = this.app.workspace.rightSplit;
 
-    if (existingLeaf) {
-      // Check if it's visible in the right sidebar.
-      const rightSplit = this.app.workspace.rightSplit;
-      if (rightSplit && !rightSplit.collapsed) {
-        // Close it.
-        existingLeaf.detach();
-      } else {
-        // Reveal it.
+    if (existingLeaf && rightSplit) {
+      if (rightSplit.collapsed) {
+        // Sidebar is collapsed, expand it and reveal the chat.
+        rightSplit.expand();
         this.app.workspace.revealLeaf(existingLeaf);
+      } else {
+        // Sidebar is visible, collapse it to hide.
+        rightSplit.collapse();
       }
-    } else {
-      // Open it.
+    } else if (!existingLeaf) {
+      // No chat view exists, create one.
       await this.activateChatView();
     }
   }
