@@ -1,158 +1,94 @@
 # obsidian-claude-code
 
-A native Obsidian plugin that embeds Claude as an AI assistant directly within your vault. Built on the Claude Agent SDK, the plugin provides a persistent chat sidebar with full access to vault operations through built-in tools, skill loading, and custom Obsidian-specific actions.
+An Obsidian plugin that embeds Claude as an AI assistant using the [Claude Agent SDK](https://github.com/anthropics/claude-code/tree/main/packages/sdk). Claude gets full access to your vault through the same tools available in Claude Code—read, write, search, and execute commands—plus custom Obsidian-specific actions.
 
-## Overview
+<details>
+<summary>Screenshot</summary>
 
-obsidian-claude-code transforms Obsidian into an AI-augmented knowledge environment. Claude can read, search, and modify your notes while maintaining conversation context across sessions. The implementation uses the Claude Agent SDK with streaming responses, built-in tool presets, and automatic skill loading from your vault's `.claude/skills/` directory.
+![Chat interface showing Claude searching vault](docs/images/chat-interface.png)
 
-![Chat interface showing Claude searching vault for saxophone practice notes](docs/images/chat-interface.png)
+</details>
 
-This is a desktop-only plugin. The Claude Agent SDK requires Node.js runtime, which is available in Obsidian's Electron environment but not on mobile platforms.
+## What It Does
+
+Claude operates as a persistent assistant in your Obsidian sidebar. Ask questions about your notes, request summaries, or have Claude modify files directly. Conversations persist across sessions, and Claude can resume where you left off.
+
+Built on the Claude Agent SDK, the plugin gives Claude access to built-in tools (Read, Write, Edit, Bash, Grep, Glob, WebFetch) plus Obsidian-specific tools for opening files, executing commands, and navigating the workspace. If you have skills defined in `vault/.claude/skills/`, those load automatically too.
+
+This is a desktop-only plugin. The Claude Agent SDK requires Node.js, which is available in Obsidian's Electron environment but not on mobile.
+
+## Requirements
+
+You need an Anthropic API key or a Claude Max subscription. Both work equally well—the subscription option is convenient if you're already paying for Claude.
 
 ## Installation
 
-Clone the repository into your vault's plugin directory:
-
 ```bash
-cd /path/to/vault/.obsidian/plugins
-git clone https://github.com/yourname/obsidian-claude-code
+cd /path/to/your/vault/.obsidian/plugins
+git clone https://github.com/Roasbeef/obsidian-claude-code
 cd obsidian-claude-code
-bun install
-bun run build
+bun install && bun run build
 ```
 
-Enable the plugin in Obsidian: Settings → Community Plugins → obsidian-claude-code.
+Then enable the plugin: Obsidian Settings → Community Plugins → obsidian-claude-code.
 
-For development with hot-reload, symlink the repository:
+## Authentication
+
+The plugin supports three authentication methods.
+
+**API Key in Settings.** The simplest option. Open Settings → Claude Code and enter your Anthropic API key. The key is stored locally in Obsidian's plugin data directory.
+
+**Environment Variable.** Set `ANTHROPIC_API_KEY` in your shell environment. The plugin reads it automatically.
+
+**Claude Max Subscription.** If you have a Claude Pro or Max subscription, you can use that instead of an API key. Run `claude setup-token` in your terminal to authenticate. This creates a `CLAUDE_CODE_OAUTH_TOKEN` that the plugin detects.
+
+For GUI apps like Obsidian to inherit the token on macOS, add this to your shell profile:
 
 ```bash
-ln -s /path/to/obsidian-claude-code /path/to/vault/.obsidian/plugins/obsidian-claude-code
-bun run dev  # watches for changes
+launchctl setenv CLAUDE_CODE_OAUTH_TOKEN "$(echo $CLAUDE_CODE_OAUTH_TOKEN)"
 ```
 
-## Configuration
-
-Open Settings → Claude Code to configure:
-
-### Authentication
-
-The plugin supports three authentication methods:
-
-1. **API Key in Settings**: Enter your Anthropic API key directly. Stored in Obsidian's plugin data directory, not synced across devices.
-
-2. **Environment Variable**: Set `ANTHROPIC_API_KEY` in your shell environment.
-
-3. **Claude Max Subscription**: Run `claude setup-token` in your terminal to authenticate with your Claude Pro/Max subscription. This creates a `CLAUDE_CODE_OAUTH_TOKEN` environment variable.
-
-The settings page will show which authentication method is active.
-
-### Model Selection
-
-Choose between:
-- `claude-sonnet-4-20250514` for faster responses
-- `claude-opus-4-5-20250501` for complex reasoning tasks
-
-### Auto-Approve Settings
-
-By default, read operations are auto-approved while writes require confirmation. Toggle `autoApproveVaultWrites` to skip write confirmations for trusted workflows.
+The settings page shows which authentication method is active.
 
 ## Usage
 
-Click the chat icon in the ribbon or use `Cmd+Shift+C` to toggle the sidebar. The interface supports:
+Toggle the sidebar with the ribbon icon or `Cmd+Shift+C`. Type your message and press Enter.
 
-**Direct Questions**: Ask about vault contents, request summaries, or get help with writing.
+Reference specific files using `@[[filename]]` syntax—the input field provides autocomplete when you type `@`. Type `/` for slash commands: `/new` starts a fresh conversation, `/clear` clears history, `/file` adds the active file to context.
 
-**File References**: Use `@[[filename]]` syntax to include specific files in context. The `@mention` button provides autocomplete for vault files.
+When Claude uses tools, the operations appear as collapsible blocks showing what happened and the result. Write operations display a permission modal unless you've enabled auto-approve in settings.
 
-**Slash Commands**: Type `/` for command autocomplete:
-- `/new` starts a fresh conversation
-- `/clear` clears history
-- `/file` adds the active file to context
-- `/search` initiates vault search
+## Tools and Skills
 
-**Tool Execution**: Claude can execute tools to interact with your vault. Tool calls appear as collapsible blocks showing the operation and result. Write operations display a permission modal unless auto-approve is enabled.
+Claude has access to all built-in Claude Code tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, and WebSearch. These handle file operations, code search, and shell commands.
 
-![Permission modal for tool approval](docs/images/permission-modal.png)
+The plugin also exposes Obsidian-specific tools through an MCP server:
 
-## Architecture
+- `open_file` — Open a file in the Obsidian editor
+- `execute_command` — Run any Obsidian command
+- `show_notice` — Display a notification
+- `get_active_file` — Get info about the current file
+- `list_commands` — Discover available commands
+- `create_note` — Create new notes
+- `reveal_in_explorer` — Show a file in the file explorer
+- `get_vault_stats` — Query vault statistics
+- `get_recent_files` — List recently modified files
 
-The plugin uses the Claude Agent SDK's `query()` function with three layers of tool access:
+### Skills
 
-```mermaid
-flowchart TB
-    subgraph plugin["Obsidian Plugin"]
-        AC["AgentController.ts"]
-        query["query({<br/>prompt: userMessage,<br/>options: {<br/>  settingSources: ['project'],<br/>  tools: { preset: 'claude_code' },<br/>  mcpServers: { obsidian: ... }<br/>}})"]
-        AC --> query
-    end
-
-    subgraph sdk["Claude Agent SDK"]
-        tools["Built-in Tools<br/><i>Read, Write, Edit, Bash,<br/>Grep, Glob, WebFetch, etc.</i>"]
-        skills["Skill Loading<br/><i>vault/.claude/skills/<br/>vault-search → semantic search + SQL</i>"]
-        mcp["Obsidian MCP Server<br/><i>open_file, execute_command,<br/>show_notice, etc.</i>"]
-    end
-
-    query --> sdk
-    sdk --> tools
-    sdk --> skills
-    sdk --> mcp
-```
-
-**Agent Layer** (`src/agent/`): `AgentController` orchestrates the SDK query, managing streaming responses and session resumption. `ObsidianMcpServer` defines custom tools for Obsidian-specific actions. `ConversationManager` persists chat history to `.obsidian-claude-code/`.
-
-**View Layer** (`src/views/`): Renders the chat interface. `ChatView` is an Obsidian `ItemView` that hosts message display and input components. Message rendering supports full markdown with syntax highlighting.
-
-See [docs/architecture.md](docs/architecture.md) for detailed component documentation.
-
-## Tool Capabilities
-
-### Built-in Tools (from Claude Agent SDK)
-
-| Tool | Operation |
-|------|-----------|
-| `Read` | Read file contents |
-| `Write` | Create or modify files |
-| `Edit` | Edit files in place |
-| `Bash` | Execute shell commands |
-| `Grep` | Search file contents |
-| `Glob` | Find files by pattern |
-| `WebFetch` | Fetch web content |
-| `WebSearch` | Search the web |
-
-### Obsidian-Specific Tools (SDK MCP Server)
-
-| Tool | Operation |
-|------|-----------|
-| `open_file` | Open file in Obsidian view |
-| `execute_command` | Run Obsidian command |
-| `show_notice` | Display notification |
-| `get_active_file` | Get current file info |
-| `rebuild_vault_index` | Trigger vault-search index rebuild |
-| `list_commands` | Discover available commands |
-| `create_note` | Create new notes |
-| `reveal_in_explorer` | Show in file explorer |
-| `get_vault_stats` | Vault statistics |
-| `get_recent_files` | Recently modified files |
-
-### Skills (from vault/.claude/skills/)
-
-Skills are automatically loaded if they exist in your vault. This repository includes example skills in the `skills/` directory that you can copy to your vault:
+Skills in `vault/.claude/skills/` load automatically. The repository includes a `vault-search` skill you can copy to your vault:
 
 ```bash
 cp -r skills/vault-search /path/to/vault/.claude/skills/
 ```
 
-The `vault-search` skill provides:
-- Semantic search via sqlite-vec embeddings
-- SQL queries on note frontmatter (Dataview replacement)
-- Index rebuild command
+This skill provides semantic search via sqlite-vec embeddings and SQL queries over note frontmatter (a Dataview alternative). See [skills/README.md](skills/README.md) for setup instructions.
 
-See [skills/README.md](skills/README.md) for installation instructions and how to create custom skills.
+See [docs/architecture.md](docs/architecture.md) for full architectural details.
 
 ## Data Storage
 
-Conversation data is stored in `.obsidian-claude-code/` at the vault root:
+Conversations are stored in `.obsidian-claude-code/` at your vault root:
 
 ```
 .obsidian-claude-code/
@@ -161,24 +97,17 @@ Conversation data is stored in `.obsidian-claude-code/` at the vault root:
     └── {id}.json         # Full message history per conversation
 ```
 
-This directory can be added to `.gitignore` if you don't want to sync conversation history.
+Add this directory to `.gitignore` if you don't want to sync conversation history.
 
 ## Development
 
 ```bash
-bun install          # Install dependencies
-bun run dev          # Watch mode with rebuild
-bun run build        # Production build
-bun run tsc -noEmit  # Type check only
+bun run dev      # watch mode with rebuild
+bun run build    # production build
+make check       # typecheck + lint + test
 ```
 
-The build produces `main.js` using esbuild configured for Obsidian's environment. Source maps are included in development builds.
-
-## Requirements
-
-- Obsidian 1.4.0 or later (desktop only)
-- Authentication: Anthropic API key or Claude Max subscription
-- Optional: `vault-search` skill in `.claude/skills/` for semantic search
+Debug logs are written to `~/.obsidian-claude-code/debug.log`.
 
 ## License
 
