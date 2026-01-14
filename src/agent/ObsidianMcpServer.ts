@@ -3,6 +3,7 @@ import { z } from "zod";
 import { App, Notice, TFile, TFolder, Command } from "obsidian";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { showAskUserQuestionModal } from "../views/AskUserQuestionModal";
 
 const execFileAsync = promisify(execFile);
 
@@ -413,6 +414,34 @@ export function createObsidianMcpServer(
           return {
             content: [
               { type: "text" as const, text: JSON.stringify(recent, null, 2) },
+            ],
+          };
+        }
+      ),
+
+      // Ask the user questions with multiple choice options.
+      tool(
+        "ask_user",
+        "Show a modal dialog to ask the user questions with multiple choice options. Use this when you need user input, clarification, or preferences. The user will see an interactive dialog and can select from the provided options.",
+        {
+          questions: z.array(z.object({
+            question: z.string().describe("The question to ask the user"),
+            header: z.string().describe("Short label for the question (max 12 characters, e.g., 'PREFERENCE', 'CHOOSE')"),
+            options: z.array(z.object({
+              label: z.string().describe("Option label (short, e.g., 'Yes', 'Create new file', 'Option A')"),
+              description: z.string().describe("Brief description of what this option means"),
+            })).describe("2-4 options for the user to choose from"),
+            multiSelect: z.boolean().describe("Whether the user can select multiple options (true) or just one (false)"),
+          })).min(1).max(4).describe("1-4 questions to ask the user in a single dialog"),
+        },
+        async (args) => {
+          const answers = await showAskUserQuestionModal(app, args.questions);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({ answers }, null, 2),
+              },
             ],
           };
         }
