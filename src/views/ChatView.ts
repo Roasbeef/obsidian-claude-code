@@ -155,6 +155,19 @@ export class ChatView extends ItemView {
       (this.app as any).setting.open();
       (this.app as any).setting.openTabById("obsidian-claude-code");
     });
+
+    // Add a refresh button for after settings are saved.
+    const refreshEl = noticeEl.createEl("button", { cls: "claude-code-refresh-btn" });
+    refreshEl.setText("Refresh");
+    refreshEl.addEventListener("click", () => {
+      this.refreshView();
+    });
+  }
+
+  // Re-render the view (e.g., after settings change).
+  refreshView() {
+    this.contentEl.empty();
+    this.renderView();
   }
 
   private renderHeader() {
