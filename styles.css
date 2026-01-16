@@ -946,3 +946,72 @@
 .claude-code-tool-call-status.error {
   color: var(--text-error);
 }
+
+/* Message Queue (async queueing while Claude works) */
+.claude-code-queue-container {
+  padding: 8px 12px;
+  background-color: var(--background-secondary-alt);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.claude-code-queue-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-accent);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.claude-code-queue-header::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background-color: var(--text-accent);
+  border-radius: 50%;
+  animation: claude-code-pulse 1.4s ease-in-out infinite;
+}
+
+.claude-code-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.claude-code-queue-item:last-child {
+  margin-bottom: 0;
+}
+
+.claude-code-queue-content {
+  flex: 1;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.claude-code-queue-remove {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-faint);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.claude-code-queue-remove:hover {
+  background-color: var(--background-modifier-error);
+  color: var(--text-error);
+}

@@ -151,3 +151,10 @@ export interface FileSuggestion {
   name: string;
   isFolder: boolean;
 }
+
+// Queued message for async message queueing while Claude is working.
+export interface QueuedMessage {
+  id: string;
+  content: string;
+  timestamp: number;
+}

@@ -187,3 +187,21 @@ export function createRandomString(length: number): string {
 export function createRandomId(): string {
   return `${Date.now()}-${createRandomString(8)}`;
 }
+
+// Create a mock queued message for async message queueing.
+export function createMockQueuedMessage(
+  overrides?: Partial<MockQueuedMessage>
+): MockQueuedMessage {
+  return {
+    id: `msg-${Date.now()}-${createRandomString(8)}`,
+    content: "Queued test message",
+    timestamp: Date.now(),
+    ...overrides,
+  };
+}
+
+export interface MockQueuedMessage {
+  id: string;
+  content: string;
+  timestamp: number;
+}
