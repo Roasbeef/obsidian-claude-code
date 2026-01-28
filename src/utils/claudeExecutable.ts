@@ -20,6 +20,14 @@ export function findClaudeExecutable(): string | undefined {
   const possiblePaths: string[] = [
     // User's npm global bin from NVM_BIN env var.
     process.env.NVM_BIN ? `${process.env.NVM_BIN}/claude` : null,
+    process.env.NVM_BIN ? `${process.env.NVM_BIN}/claude.cmd` : null,
+
+    // Windows paths.
+    `${homeDir}/.local/bin/claude.exe`,
+    `${homeDir}/.local/bin/claude.cmd`,
+    `${homeDir}/AppData/Roaming/npm/claude.cmd`,
+    `${homeDir}/AppData/Local/npm/claude.cmd`,
+    "C:/Program Files/nodejs/claude.cmd",
 
     // Common nvm paths - check multiple node versions.
     `${homeDir}/.nvm/versions/node/v20.11.1/bin/claude`,
