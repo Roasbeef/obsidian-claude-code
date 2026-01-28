@@ -27,6 +27,9 @@ export function findClaudeExecutable(): string | undefined {
     `${homeDir}/.nvm/versions/node/v21.0.0/bin/claude`,
     `${homeDir}/.nvm/versions/node/v18.0.0/bin/claude`,
 
+    // User local bin (common for pip/pipx installs and manual installs).
+    `${homeDir}/.local/bin/claude`,
+
     // npm global without nvm.
     `${homeDir}/.npm-global/bin/claude`,
     `${homeDir}/npm/bin/claude`,
